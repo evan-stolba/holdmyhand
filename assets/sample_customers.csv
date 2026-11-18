@@ -1,0 +1,41 @@
+CustomerID,CustomerName,Segment,Region,SignupDate
+C001,Sample Co 01,Enterprise,East,2023-10-17
+C002,Casey Example 02,Enterprise,West,2022-09-08
+C003,Sample Co 03,Enterprise,East,2024-01-25
+C004,Avery Example 04,Enterprise,East,2023-03-09
+C005,Sample Co 05,Enterprise,West,2022-04-06
+C006,Quinn Example 06,Enterprise,West,2023-09-09
+C007,Sample Co 07,Consumer,South,2024-01-04
+C008,Taylor Example 08,Consumer,North,2023-04-05
+C009,Sample Co 09,Enterprise,West,2024-04-08
+C010,Riley Example 10,Small Business,West,2022-12-15
+C011,Sample Co 11,Small Business,East,2022-08-09
+C012,Jordan Example 12,Enterprise,North,2023-01-25
+C013,Sample Co 13,Small Business,North,2024-05-17
+C014,Alex Example 14,Small Business,East,2024-01-18
+C015,Sample Co 15,Enterprise,North,2023-01-23
+C016,Avery Example 16,Small Business,West,2024-06-01
+C017,Sample Co 17,Enterprise,East,2023-12-23
+C018,Taylor Example 18,Small Business,East,2024-03-02
+C019,Sample Co 19,Enterprise,East,2024-05-25
+C020,Riley Example 20,Small Business,North,2022-10-12
+C021,Sample Co 21,Small Business,North,2022-06-16
+C022,Taylor Example 22,Small Business,East,2023-11-18
+C023,Sample Co 23,Consumer,West,2023-09-16
+C024,Quinn Example 24,Enterprise,West,2024-01-17
+C025,Sample Co 25,Small Business,North,2023-04-19
+C026,Quinn Example 26,Consumer,North,2022-08-13
+C027,Sample Co 27,Enterprise,West,2024-05-13
+C028,Alex Example 28,Small Business,South,2024-04-04
+C029,Sample Co 29,Enterprise,West,2022-10-02
+C030,Avery Example 30,Consumer,North,2024-06-16
+C031,Sample Co 31,Consumer,South,2022-08-06
+C032,Riley Example 32,Small Business,West,2023-10-21
+C033,Sample Co 33,Enterprise,West,2022-09-29
+C034,Quinn Example 34,Small Business,South,2023-07-06
+C035,Sample Co 35,Small Business,North,2023-08-21
+C036,Taylor Example 36,Consumer,South,2022-05-22
+C037,Sample Co 37,Enterprise,East,2022-04-04
+C038,Sam Example 38,Enterprise,South,2023-10-05
+C039,Sample Co 39,Enterprise,South,2023-09-03
+C040,Riley Example 40,Small Business,North,2023-09-03

@@ -1,0 +1,4 @@
+Customer Name,Email,Phone,Region,Sales,Notes,Salary,Card
+Acme Corp,jane.doe@acme.example,(555) 123-4567,East,1200.50,"Call Jane at 555-987-6543, api_key=abc123XYZ",85000,4111 1111 1111 1111
+Beta LLC,bob@beta.example,+44 20 7946 0958,West,300,"SSN 123-45-6789 on file; server 10.0.0.12",62000,
+acme corp ,JANE.DOE@acme.example,,East,99,"see C:\Users\jsmith\Documents\deal.xlsx",,

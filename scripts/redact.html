@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Blocks ALL network access: this page cannot send your data anywhere. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:">
+<title>holdmyhand redactor</title>
+<style>
+:root{--bg:#f7f7f5;--panel:#fff;--text:#1d1d1b;--muted:#5f5f5a;--line:#dcdcd6;--accent:#2f6f4f;--accent-text:#fff;--warn-bg:#fff6e0;--warn:#7a5200;--code:#f0f0ec}
+@media (prefers-color-scheme:dark){:root{--bg:#161615;--panel:#1f1f1d;--text:#ececea;--muted:#a3a39d;--line:#3a3a36;--accent:#5fb48a;--accent-text:#0d1f16;--warn-bg:#3a2e12;--warn:#f3d38a;--code:#2a2a27}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:900px;margin:0 auto;padding:24px 16px 48px}
+h1{font-size:1.5rem;margin:0 0 4px}
+h2{font-size:1.05rem;margin:0 0 8px}
+p{margin:0 0 10px}
+.muted{color:var(--muted)}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-top:16px}
+.note{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 12px;font-size:.92rem}
+label{display:block;font-weight:600;margin:10px 0 4px}
+input[type=text],input[type=password],textarea{width:100%;border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--bg);color:var(--text);font:inherit}
+textarea{min-height:160px;font-family:ui-monospace,Consolas,monospace;font-size:.85rem}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+button{border:0;border-radius:8px;padding:9px 14px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:var(--accent-text)}
+button.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}
+pre{background:var(--code);border-radius:8px;padding:10px;overflow:auto;font-size:.82rem;max-height:320px;white-space:pre-wrap;word-break:break-word}
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left;vertical-align:top}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <h1>holdmyhand redactor</h1>
+  <p class="muted">Make a safe copy of a CSV or text file before sharing it with an AI tool. Everything happens inside this page on your computer. The page is locked so it can't connect to the internet.</p>
+
+  <div class="note"><b>Best effort only.</b> Automatic detection can miss names written in sentences, unusual ID formats and non-standard layouts. Always read the result before sharing it. Your company's policy comes first.</div>
+
+  <div class="panel">
+    <h2>1. Your data</h2>
+    <label for="file">Open a file (.csv, .tsv, .txt, .log)</label>
+    <input id="file" type="file" accept=".csv,.tsv,.txt,.log,.sql,.md,.json,text/*">
+    <label for="input">…or paste it here</label>
+    <textarea id="input" placeholder="Paste CSV (with a header row) or any text"></textarea>
+    <div class="row">
+      <label style="margin:0;font-weight:400"><input type="radio" name="kind" value="auto" checked> Detect automatically</label>
+      <label style="margin:0;font-weight:400"><input type="radio" name="kind" value="table"> It's a table (CSV)</label>
+      <label style="margin:0;font-weight:400"><input type="radio" name="kind" value="text"> It's plain text</label>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Options</h2>
+    <label for="secret">Secret phrase</label>
+    <input id="secret" type="password" placeholder="At least 12 characters. Use the same one each time so tokens stay consistent">
+    <div class="row" style="margin-top:6px"><button id="gen" class="secondary" type="button">Generate a strong random secret</button></div>
+    <p class="muted" style="font-size:.88rem">Same phrase = same token for the same value, so files can still be joined after redaction. Keep it private and hard to guess: someone with your phrase and a list of possible values (like all employee IDs) could match tokens. To match the Python tool, paste the contents of your secret file.</p>
+    <label style="font-weight:400"><input type="checkbox" id="seq"> Use numbered tokens instead (CUSTOMER_001…). These can't be matched across files or reversed, so they're the safest choice when you don't need to join files. No secret needed.</label>
+    <label for="terms">Extra names or terms to replace (one per line, e.g. client names)</label>
+    <textarea id="terms" style="min-height:70px" placeholder="Acme Corp&#10;Project Falcon"></textarea>
+    <label for="cols">Extra columns to replace (comma-separated)</label>
+    <input id="cols" type="text" placeholder="Account Manager, Region">
+    <label for="keep">Columns to leave exactly as they are (comma-separated)</label>
+    <input id="keep" type="text" placeholder="Product, Category">
+    <div class="row">
+      <button id="run">Make safe copy</button>
+      <button id="schema" class="secondary">Schema only (no values)</button>
+    </div>
+  </div>
+
+  <div id="results" class="panel hidden">
+    <h2>3. Check the result</h2>
+    <div id="report"></div>
+    <label>Safe copy (read it before sharing)</label>
+    <pre id="output"></pre>
+    <div class="row">
+      <button id="download">Download</button>
+      <button id="copy" class="secondary">Copy to clipboard</button>
+    </div>
+  </div>
+</main>
+
+<script>
+"use strict";
+// ---------- SHA-256 / HMAC (pure JS, so it works from a local file) ----------
+function sha256(bytes){
+  const K=[0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2];
+  let H=[0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+  const l=bytes.length, withPad=new Uint8Array(((l+9+63)>>6)<<6);
+  withPad.set(bytes); withPad[l]=0x80;
+  const bits=l*8, dv=new DataView(withPad.buffer);
+  dv.setUint32(withPad.length-4,bits>>>0); dv.setUint32(withPad.length-8,Math.floor(bits/2**32));
+  const W=new Uint32Array(64), r=(x,n)=>(x>>>n)|(x<<(32-n));
+  for(let o=0;o<withPad.length;o+=64){
+    for(let i=0;i<16;i++)W[i]=dv.getUint32(o+i*4);
+    for(let i=16;i<64;i++){const s0=r(W[i-15],7)^r(W[i-15],18)^(W[i-15]>>>3),s1=r(W[i-2],17)^r(W[i-2],19)^(W[i-2]>>>10);W[i]=(W[i-16]+s0+W[i-7]+s1)>>>0;}
+    let [a,b,c,d,e,f,g,h]=H;
+    for(let i=0;i<64;i++){const S1=r(e,6)^r(e,11)^r(e,25),ch=(e&f)^(~e&g),t1=(h+S1+ch+K[i]+W[i])>>>0,S0=r(a,2)^r(a,13)^r(a,22),mj=(a&b)^(a&c)^(b&c),t2=(S0+mj)>>>0;h=g;g=f;f=e;e=(d+t1)>>>0;d=c;c=b;b=a;a=(t1+t2)>>>0;}
+    H=[H[0]+a,H[1]+b,H[2]+c,H[3]+d,H[4]+e,H[5]+f,H[6]+g,H[7]+h].map(x=>x>>>0);
+  }
+  const out=new Uint8Array(32); H.forEach((x,i)=>new DataView(out.buffer).setUint32(i*4,x)); return out;
+}
+const enc=new TextEncoder();
+function hmacHex(keyStr,msgStr){
+  let key=enc.encode(keyStr); if(key.length>64)key=sha256(key);
+  const k=new Uint8Array(64); k.set(key);
+  const ip=k.map(x=>x^0x36), op=k.map(x=>x^0x5c), msg=enc.encode(msgStr);
+  const inner=new Uint8Array(64+msg.length); inner.set(ip); inner.set(msg,64);
+  const ih=sha256(inner), outer=new Uint8Array(96); outer.set(op); outer.set(ih,64);
+  return Array.from(sha256(outer),b=>b.toString(16).padStart(2,"0")).join("");
+}
+
+// ---------- Rules (kept in step with redact.py) ----------
+const COLUMN_RULES=[
+  [/(password|passwd|pwd|secret|token|apikey|accesskey|privatekey|credential)/,"SECRET"],
+  [/(ssn|socialsecurity|nationalid|nino|passport|driverslicen|taxid|tin$|sin$)/,"GOVID"],
+  [/(cardnumber|creditcard|debitcard|^pan$|cvv|cvc)/,"CARD"],
+  [/(iban|accountnumber|accountno|routingnumber|sortcode|bankaccount)/,"BANKACCT"],
+  [/(email|e-?mail)/,"EMAIL"],
+  [/(phone|^mobile|^cell$|cellphone|telephone|^fax)/,"PHONE"],
+  [/(ipaddress|^ip$)/,"IP"],
+  [/(address|street|postcode|postalcode|zipcode|^zip$)/,"ADDRESS"],
+  [/(^dob$|dateofbirth|birthdate|birthday)/,"DOB"],
+  [/(patient|diagnosis|mrn|medicalrecord|condition|treatment)/,"HEALTH"],
+  [/(salary|wage|bonus|compensation|payrate|pay$)/,"PAY"],
+  [/(customer|client|account(name)?$|company|vendor|supplier|partner)(name)?$/,"CUSTOMER"],
+  [/(customer|client|account)(id|no|number|code|ref)$/,"CUSTOMER"],
+  [/(employee|staff|worker)(id|no|number|code|name)?$/,"EMPLOYEE"],
+  [/(firstname|lastname|surname|fullname|^name$|contact(name)?$|manager|owner|rep$|salesrep|accountmanager)/,"PERSON"],
+  [/^(userid|username|login|loginid)$/,"USER"],
+];
+const FIXED_LABEL={SECRET:"[REDACTED_SECRET]",CARD:"[REDACTED_CARD]",GOVID:"[REDACTED_ID]"};
+const FLAG_ONLY=new Set(["PAY"]);
+const PATTERNS=[
+  ["SECRET",/\b(?:sk-[A-Za-z0-9_\-]{16,}|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,}|xox[abprs]-[A-Za-z0-9\-]{10,}|AIza[0-9A-Za-z_\-]{35})\b/g],
+  ["SECRET",/\b(password|passwd|pwd|secret|api[_-]?key|token|access[_-]?key)\s*[:=]\s*[^\s;,'"]+/gi],
+  ["SECRET",/[a-z][a-z0-9+.\-]*:\/\/[^\s:\/@]+:[^\s@\/]+@/gi],
+  ["EMAIL",/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/g],
+  ["GOVID",/\b\d{3}-\d{2}-\d{4}\b/g],
+  ["CARD",/\b(?:\d[ \-]?){12,18}\d\b/g],
+  ["IBAN",/\b[A-Z]{2}\d{2}(?:[ ]?[A-Z0-9]{4}){2,7}(?:[ ]?[A-Z0-9]{1,3})?\b/g],
+  ["GOVID",/\b[A-CEGHJ-PR-TW-Z]{2} ?\d{2} ?\d{2} ?\d{2} ?[A-D]\b/g],
+  ["POSTCODE",/\b(?:GIR ?0AA|[A-PR-UWYZ][A-HK-Y]?\d[A-Z\d]? ?\d[ABD-HJLNP-UW-Z]{2})\b/g],
+  ["IP",/\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b/g],
+  ["PHONE",/(?<![\w\-])(?:\+\d{1,3}[ .\-]?)?(?:\(\d{2,4}\)[ .\-]?|\d{2,4}[ .\-])\d{3,4}[ .\-]?\d{3,4}(?![\w\-])/g],
+  ["PATH",/(?:[a-z]:\\users\\[^\\\s]+|\/(?:home|users)\/[^\/\s]+|\\\\[^\\\s]+\\[^\\\s]+)/gi],
+];
+const normCol=s=>String(s).toLowerCase().replace(/[^a-z0-9]/g,"");
+function classify(name){const n=normCol(name);for(const [rx,p] of COLUMN_RULES){if(rx.test(n))return p;}return null;}
+function luhn(d){let t=0,alt=false;for(let i=d.length-1;i>=0;i--){let n=+d[i];if(alt){n*=2;if(n>9)n-=9;}t+=n;alt=!alt;}return t%10===0;}
+
+class Tokenizer{
+  constructor(secret,seq){this.secret=secret;this.counts={};this.seqMode=!!seq;this.seq=new Map();this.n={};}
+  token(prefix,value){
+    this.counts[prefix]=(this.counts[prefix]||0)+1;
+    if(FIXED_LABEL[prefix])return FIXED_LABEL[prefix];
+    const norm=String(value).trim().toLowerCase().replace(/\s+/g," ");
+    if(this.seqMode){const k=prefix+"|"+norm;if(!this.seq.has(k)){this.n[prefix]=(this.n[prefix]||0)+1;this.seq.set(k,this.n[prefix]);}return prefix+"_"+String(this.seq.get(k)).padStart(3,"0");}
+    return prefix+"_"+hmacHex(this.secret,prefix+"|"+norm).slice(0,8).toUpperCase();
+  }
+}
+const escRx=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+function scrub(text,tok,terms){
+  if(!text)return text; let out=text;
+  for(const t of terms){out=out.replace(new RegExp("(?<!\\w)"+escRx(t)+"(?!\\w)","gi"),m=>tok.token("TERM",m));}
+  for(const [p,rx] of PATTERNS){
+    out=out.replace(rx,m=>{
+      if(p==="CARD"){const d=m.replace(/\D/g,"");if(!(d.length>=13&&d.length<=19&&luhn(d)))return m;}
+      if(p==="IBAN"&&!/\d/.test(m.slice(4)))return m;
+      if(p==="PHONE"&&m.replace(/\D/g,"").length<7)return m;
+      if(p==="PATH")return "[FILE_PATH]";
+      return tok.token(p,m);
+    });
+  }
+  return out;
+}
+
+// ---------- CSV ----------
+function detectDelim(t){const first=t.split(/\r?\n/)[0]||"";const c={",":0,";":0,"\t":0,"|":0};for(const ch of first)if(ch in c)c[ch]++;return Object.entries(c).sort((a,b)=>b[1]-a[1])[0][1]?Object.entries(c).sort((a,b)=>b[1]-a[1])[0][0]:",";}
+function parseCSV(t,d){const rows=[];let row=[],f="",q=false;for(let i=0;i<t.length;i++){const ch=t[i];if(q){if(ch==='"'){if(t[i+1]==='"'){f+='"';i++;}else q=false;}else f+=ch;}else if(ch==='"')q=true;else if(ch===d){row.push(f);f="";}else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&t[i+1]==="\n")i++;row.push(f);rows.push(row);row=[];f="";}else f+=ch;}if(f!==""||row.length){row.push(f);rows.push(row);}return rows;}
+function toCSV(rows,d){return rows.map(r=>r.map(v=>{v=v==null?"":String(v);return /["\n\r]/.test(v)||v.includes(d)?'"'+v.replace(/"/g,'""')+'"':v;}).join(d)).join("\n")+"\n";}
+function inferType(vals){vals=vals.filter(v=>v!=="");if(!vals.length)return"empty";if(vals.every(v=>!isNaN(parseFloat(v.replace(/,/g,"")))&&/^-?[\d,]*\.?\d+$/.test(v.trim())))return vals.every(v=>/^-?[\d,]+$/.test(v.trim()))?"integer":"decimal";if(vals.every(v=>/^\d{4}-\d{2}-\d{2}|^\d{1,2}\/\d{1,2}\/\d{2,4}/.test(v)))return"date";return"text";}
+
+// ---------- UI ----------
+const $=id=>document.getElementById(id);
+let lastOut="",lastName="redacted.csv";
+$("file").addEventListener("change",e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$("input").value=r.result;lastName=f.name.replace(/(\.[^.]+)?$/,m=>".redacted"+(m||".txt"));};r.readAsText(f);});
+const list=s=>s.split(",").map(x=>x.trim()).filter(Boolean);
+function isTable(text){const k=document.querySelector("input[name=kind]:checked").value;if(k!=="auto")return k==="table";const lines=text.split(/\r?\n/).filter(Boolean).slice(0,5);const d=detectDelim(text);if(lines.length<2)return false;const n=lines[0].split(d).length;return n>1&&lines.every(l=>Math.abs(l.split(d).length-n)<=1);}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+function run(schemaOnly){
+  const text=$("input").value; if(!text.trim()){alertBox("Open a file or paste some data first.");return;}
+  const seqMode=$("seq").checked, secret=$("secret").value;
+  if(!schemaOnly&&!seqMode&&secret.length<12){alertBox("Enter a secret of at least 12 characters (or click Generate), or tick numbered tokens. A short secret makes tokens easier to guess.");return;}
+  const tok=new Tokenizer(secret||"schema",seqMode);
+  const terms=[...new Set($("terms").value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean))].sort((a,b)=>b.length-a.length);
+  const force=new Set(list($("cols").value).map(normCol)), keep=new Set(list($("keep").value).map(normCol));
+  let html="";
+  if(isTable(text)){
+    const d=detectDelim(text), rows=parseCSV(text,d).filter(r=>r.length>1||r[0]!=="");
+    const header=rows[0], body=rows.slice(1);
+    if(schemaOnly){
+      const out=[["column","type","rows","blanks","distinct_values","looks_sensitive"]];
+      header.forEach((h,i)=>{const col=body.map(r=>r[i]??"");const flag=classify(h)||(col.slice(0,500).some(v=>v&&scrub(v,new Tokenizer("p"),[])!==v)?"patterns found in values":"");out.push([h,inferType(col),col.length,col.filter(v=>v==="").length,new Set(col.filter(v=>v!=="")).size,flag]);});
+      lastOut=toCSV(out,","); lastName=lastName.replace(".redacted",".schema");
+      html="<p>Schema summary: column names and counts only, no data values.</p>";
+    } else {
+      const plan=header.map(h=>{const n=normCol(h);let p=classify(h);if(keep.has(n))return{h,p:null,keep:true,a:"keep (you chose it)"};if(force.has(n))return{h,p:(p&&!FLAG_ONLY.has(p))?p:"VALUE",a:"replace (you chose it)"};if(p&&FLAG_ONLY.has(p))return{h,p:null,a:"FLAG: looks like "+p+" data, kept as is"};if(p)return{h,p,a:"replace with "+(FIXED_LABEL[p]||p+"_xxxxxxxx tokens")};return{h,p:null,a:"keep, scan text for patterns"};});
+      const out=[header].concat(body.map(r=>r.map((v,i)=>{const c=plan[i]||{};if(v==="")return v;if(c.p)return tok.token(c.p,v);if(c.keep)return v;return scrub(v,tok,terms);})));
+      lastOut=toCSV(out,d);
+      plan.forEach((c,i)=>{if(!c.p&&!c.keep){const vals=body.map(r=>r[i]||"").filter(Boolean).slice(0,300);if(vals.length&&vals.filter(v=>v.split(/\s+/).length>=4).length/vals.length>=0.3)c.a+=" ⚠ FREE TEXT: names in sentences may be missed. Remove this column if you don't need it, or add names to the list above";}});
+      html="<table><tr><th>Column</th><th>What happened</th></tr>"+plan.map(c=>"<tr><td>"+esc(c.h)+"</td><td>"+esc(c.a)+"</td></tr>").join("")+"</table>";
+    }
+  } else {
+    if(schemaOnly){alertBox("Schema only works with tables (CSV).");return;}
+    lastOut=scrub(text,tok,terms); html="<p>Scanned as plain text.</p>";
+  }
+  const counts=Object.entries(tok.counts).sort();
+  if(!schemaOnly)html+="<p style='margin-top:10px'><b>Replacements:</b> "+(counts.length?counts.map(([k,v])=>esc(k)+": "+v).join(", "):"none found. That does not prove it's safe; read it yourself.")+"</p>";
+  $("report").innerHTML=html; $("output").textContent=lastOut; $("results").classList.remove("hidden");
+  $("report").insertAdjacentHTML("beforeend","<div class='note' style='margin-top:10px'>Review before sharing: read the safe copy below line by line.</div>");$("results").scrollIntoView({behavior:"smooth"});
+}
+function alertBox(msg){$("report").innerHTML="<div class='note'>"+esc(msg)+"</div>";$("output").textContent="";$("results").classList.remove("hidden");}
+$("run").onclick=()=>run(false);
+$("gen").onclick=()=>{const b=new Uint8Array(32);crypto.getRandomValues(b);$("secret").type="text";$("secret").value=Array.from(b,x=>x.toString(16).padStart(2,"0")).join("");};
+$("schema").onclick=()=>run(true);
+$("download").onclick=()=>{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([lastOut],{type:"text/plain"}));a.download=lastName;document.body.appendChild(a);a.click();a.remove();};
+$("copy").onclick=()=>{navigator.clipboard&&navigator.clipboard.writeText(lastOut).then(()=>{$("copy").textContent="Copied";setTimeout(()=>$("copy").textContent="Copy to clipboard",1500);});};
+</script>
+</body>
+</html>
